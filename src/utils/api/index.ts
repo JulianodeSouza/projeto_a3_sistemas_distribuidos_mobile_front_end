@@ -108,14 +108,9 @@ export function createApi() {
       init.body = isFormData ? body : JSON.stringify(body);
     }
 
-    let res: Response;
+    let res: Response | undefined;
     try {
       res = await fetch(url, init);
-
-
-      console.log(res);
-
-
     } catch (err: any) {
       if (err?.name === "AbortError")
         throw new ApiError("Request timed out", 0, null);
@@ -124,8 +119,9 @@ export function createApi() {
       if (timer) clearTimeout(timer);
     }
 
-    if (rawResponse) return res as unknown as T;
+    if (!res) throw new ApiError("No response received", 0, null);
 
+    if (rawResponse) return res as unknown as T;
     const contentType = res.headers.get("content-type") || "";
     const text = await res.text();
     const data = contentType.includes("application/json")
@@ -133,11 +129,21 @@ export function createApi() {
       : text;
 
     if (!res.ok) {
-      throw new ApiError(
-        res.statusText || "Request failed",
-        res.status,
-        data || null
-      );
+      const msg =
+        (data && (data.message || data.error)) ||
+        text ||
+        res.statusText ||
+        "Erro na requisição";
+
+      if (typeof window !== "undefined" && typeof CustomEvent !== "undefined") {
+        window.dispatchEvent(
+          new CustomEvent("show-alert", {
+            detail: { title: "Erro", message: msg, status: res.status },
+          })
+        );
+      }
+
+      throw new ApiError(msg, res.status, data);
     }
 
     // No content

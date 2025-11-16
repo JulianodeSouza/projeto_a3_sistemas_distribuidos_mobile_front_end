@@ -4,14 +4,16 @@ import { LoginPage } from "./components/LoginPage";
 import { SignupPage } from "./components/SignupPage";
 import { Dashboard } from "./components/Dashboard";
 import api from "./utils/api";
-import { AlertDialog } from "./components/ui/alert-dialog";
 import LoadingProvider from "./components/LoadingProvider";
+import GlobalAlert from "./components/GlobalAlert";
 
 type Screen = "landing" | "login" | "signup" | "dashboard";
 
 function App() {
   const [currentScreen, setCurrentScreen] = useState<Screen>("landing");
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+
+  // alertModal was not rendering anything; use global event `show-alert` instead.
 
   const handleLogin = async (email: string, password: string) => {
     const result = await api.post("auth/login", {
@@ -21,7 +23,16 @@ function App() {
 
     // Condition to login failure
     if (result.error) {
-      // Retornar msg com o erro
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(
+          new CustomEvent("show-alert", {
+            detail: {
+              title: "Erro",
+              message: result.error || result.message || "Falha no login",
+            },
+          })
+        );
+      }
       return;
     }
 
@@ -70,7 +81,12 @@ function App() {
     content = <Dashboard onLogout={handleLogout} />;
   }
 
-  return <LoadingProvider>{content}</LoadingProvider>;
+  return (
+    <LoadingProvider>
+      {content}
+      <GlobalAlert />
+    </LoadingProvider>
+  );
 }
 
 export default App;
