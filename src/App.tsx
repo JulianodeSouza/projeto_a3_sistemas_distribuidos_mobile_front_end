@@ -13,36 +13,29 @@ function App() {
   const [currentScreen, setCurrentScreen] = useState<Screen>("landing");
   const [isAuthenticated, setIsAuthenticated] = useState(false);
 
-  // alertModal was not rendering anything; use global event `show-alert` instead.
-
   const handleLogin = async (email: string, password: string) => {
     const result = await api.post("auth/login", {
       email,
       password,
     });
 
-    // Condition to login failure
-    if (result.error) {
-      if (typeof window !== "undefined") {
-        window.dispatchEvent(
-          new CustomEvent("show-alert", {
-            detail: {
-              title: "Erro",
-              message: result.error || result.message || "Falha no login",
-            },
-          })
-        );
-      }
-      return;
-    }
-
     sessionStorage.setItem("token", result.data.token);
     setIsAuthenticated(true);
     setCurrentScreen("dashboard");
   };
 
-  const handleSignup = (name: string, email: string, password: string) => {
-    console.log("Signup:", { name, email, password });
+  const handleSignup = async (
+    name: string,
+    email: string,
+    password: string
+  ) => {
+    const result = await api.post("users", {
+      name,
+      email,
+      password,
+    });
+
+    sessionStorage.setItem("token", result.data.token);
     setIsAuthenticated(true);
     setCurrentScreen("dashboard");
   };
