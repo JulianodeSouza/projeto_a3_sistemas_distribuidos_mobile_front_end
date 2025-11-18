@@ -108,7 +108,7 @@ export function createApi() {
       init.body = isFormData ? body : JSON.stringify(body);
     }
 
-    let res: Response | undefined;
+    let res: Response;
     try {
       res = await fetch(url, init);
     } catch (err: any) {
@@ -119,9 +119,8 @@ export function createApi() {
       if (timer) clearTimeout(timer);
     }
 
-    if (!res) throw new ApiError("No response received", 0, null);
-
     if (rawResponse) return res as unknown as T;
+
     const contentType = res.headers.get("content-type") || "";
     const text = await res.text();
     const data = contentType.includes("application/json")
@@ -129,21 +128,11 @@ export function createApi() {
       : text;
 
     if (!res.ok) {
-      const msg =
-        (data && (data.message || data.error)) ||
-        text ||
-        res.statusText ||
-        "Erro na requisição";
-
-      if (typeof window !== "undefined" && typeof CustomEvent !== "undefined") {
-        window.dispatchEvent(
-          new CustomEvent("show-alert", {
-            detail: { title: "Erro", message: msg, status: res.status },
-          })
-        );
-      }
-
-      throw new ApiError(msg, res.status, data);
+      throw new ApiError(
+        res.statusText || "Request failed",
+        res.status,
+        data || null
+      );
     }
 
     // No content

@@ -22,7 +22,6 @@ export function SignupPage({ onSignup, onBackToLanding, onGoToLogin }: SignupPag
   return (
     <div className="min-h-screen bg-gradient-to-br from-purple-50 to-blue-50 flex items-center justify-center px-4 py-12">
       <div className="w-full max-w-md">
-        {/* Logo/Header */}
         <div className="text-center mb-8">
           <button
             onClick={onBackToLanding}
@@ -35,7 +34,7 @@ export function SignupPage({ onSignup, onBackToLanding, onGoToLogin }: SignupPag
               </svg>
             </div>
             <span className="text-slate-900 group-hover:text-purple-600 transition-colors">
-              Pró-Quitação
+              QuitaJá
             </span>
           </button>
           <h1 className="text-slate-900 mb-2">Crie sua conta grátis</h1>

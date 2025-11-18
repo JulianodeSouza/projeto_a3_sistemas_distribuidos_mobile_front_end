@@ -1,64 +1,34 @@
 import { useState } from 'react';
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from './ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './ui/dialog';
 import { Label } from './ui/label';
 import { Input } from './ui/input';
 import { Button } from './ui/button';
 import { Card } from './ui/card';
 import { Badge } from './ui/badge';
+import api from '../utils/api'; // Importar API
+import { toast } from 'sonner'; // Importar Toast
 
 interface SimulationDialogProps {
   isOpen: boolean;
   onClose: () => void;
 }
 
-interface Institution {
-  id: string;
-  name: string;
-  interestRate: number;
-  type: 'baixo' | 'medio' | 'alto';
-  logo?: string;
-}
-
-interface SimulationResult {
-  institution: Institution;
-  monthlyPayment: number;
+// DTO que vem do Java
+interface SimulationResultDTO {
+  institutionName: string;
+  monthlyInterestRate: number;
+  installmentValue: number;
   totalAmount: number;
-  totalInterest: number;
-  cet: number;
+  cetPercentage: number;
 }
-
-// Dados simulados de instituições financeiras
-const institutions: Institution[] = [
-  { id: '1', name: 'Banco Digital Verde', interestRate: 1.99, type: 'baixo' },
-  { id: '2', name: 'Banco Cooperativo', interestRate: 2.49, type: 'baixo' },
-  { id: '3', name: 'Banco Tradicional A', interestRate: 3.99, type: 'medio' },
-  { id: '4', name: 'Financeira Express', interestRate: 5.99, type: 'medio' },
-  { id: '5', name: 'Banco Cartão Premium', interestRate: 8.99, type: 'alto' },
-  { id: '6', name: 'Cheque Especial Bank', interestRate: 12.99, type: 'alto' },
-];
 
 export function SimulationDialog({ isOpen, onClose }: SimulationDialogProps) {
   const [amount, setAmount] = useState('');
   const [installments, setInstallments] = useState('');
-  const [results, setResults] = useState<SimulationResult[] | null>(null);
+  const [results, setResults] = useState<SimulationResultDTO[] | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
 
-  const calculateLoan = (principal: number, rate: number, months: number) => {
-    const monthlyRate = rate / 100;
-    const monthlyPayment = (principal * monthlyRate * Math.pow(1 + monthlyRate, months)) / 
-                          (Math.pow(1 + monthlyRate, months) - 1);
-    const totalAmount = monthlyPayment * months;
-    const totalInterest = totalAmount - principal;
-    const cet = ((totalAmount / principal) - 1) * 100;
-
-    return {
-      monthlyPayment,
-      totalAmount,
-      totalInterest,
-      cet
-    };
-  };
-
-  const handleSimulate = (e: React.FormEvent) => {
+  const handleSimulate = async (e: React.FormEvent) => {
     e.preventDefault();
     
     const principal = parseFloat(amount);
@@ -66,18 +36,22 @@ export function SimulationDialog({ isOpen, onClose }: SimulationDialogProps) {
 
     if (!principal || !months) return;
 
-    const simulationResults: SimulationResult[] = institutions.map(institution => {
-      const calculation = calculateLoan(principal, institution.interestRate, months);
-      return {
-        institution,
-        ...calculation
-      };
-    });
+    try {
+      setIsLoading(true);
+      // CHAMA A API DO JAVA
+      const data = await api.get<SimulationResultDTO[]>(
+        `simulations?value=${principal}&installments=${months}`
+      );
+      
+      // A API do Java já devolve ordenado (do melhor para o pior)
+      setResults(data);
 
-    // Ordenar por CET (menor para maior)
-    simulationResults.sort((a, b) => a.cet - b.cet);
-
-    setResults(simulationResults);
+    } catch (error) {
+      console.error(error);
+      toast.error("Erro ao realizar simulação.");
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const handleReset = () => {
@@ -91,7 +65,8 @@ export function SimulationDialog({ isOpen, onClose }: SimulationDialogProps) {
     const best = results[0];
     const worst = results[results.length - 1];
     const difference = worst.totalAmount - best.totalAmount;
-    const percentDiff = ((worst.cet - best.cet) / best.cet) * 100;
+    // Cálculo simples da diferença percentual do CET
+    const percentDiff = ((worst.cetPercentage - best.cetPercentage) / best.cetPercentage) * 100;
     
     return { best, worst, difference, percentDiff };
   };
@@ -143,8 +118,12 @@ export function SimulationDialog({ isOpen, onClose }: SimulationDialogProps) {
               </div>
 
               <div className="flex gap-3">
-                <Button type="submit" className="flex-1 bg-gradient-to-r from-blue-600 to-purple-600">
-                  Simular Comparação
+                <Button 
+                  type="submit" 
+                  className="flex-1 bg-gradient-to-r from-blue-600 to-purple-600"
+                  disabled={isLoading}
+                >
+                  {isLoading ? 'Calculando...' : 'Simular Comparação'}
                 </Button>
                 {results && (
                   <Button type="button" variant="outline" onClick={handleReset}>
@@ -169,9 +148,9 @@ export function SimulationDialog({ isOpen, onClose }: SimulationDialogProps) {
                 <div className="flex-1">
                   <h3 className="text-slate-900 mb-2">⚠️ Cuidado! A Menor Parcela NEM SEMPRE é o Melhor Negócio</h3>
                   <p className="text-slate-700 mb-3">
-                    O <strong>Custo Efetivo Total (CET)</strong> do <strong>{comparison.worst.institution.name}</strong> é{' '}
+                    O <strong>Custo Efetivo Total (CET)</strong> do <strong>{comparison.worst.institutionName}</strong> é{' '}
                     <span className="text-red-700">{comparison.percentDiff.toFixed(0)}% maior</span> que o{' '}
-                    <strong>{comparison.best.institution.name}</strong>!
+                    <strong>{comparison.best.institutionName}</strong>!
                   </p>
                   <div className="bg-white p-4 rounded-lg">
                     <p className="text-slate-900 mb-2">Você pagaria <strong className="text-red-600">R$ {comparison.difference.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} A MAIS</strong> escolhendo a opção mais cara!</p>
@@ -187,15 +166,20 @@ export function SimulationDialog({ isOpen, onClose }: SimulationDialogProps) {
           {/* Resultados */}
           {results && results.length > 0 && (
             <div>
-              <h3 className="text-slate-900 mb-4">Comparação de Propostas</h3>
+              <h3 className="text-slate-900 mb-4">Comparação de Propostas (Calculado via API Java)</h3>
               <div className="grid md:grid-cols-2 gap-4">
                 {results.map((result, index) => {
                   const isBest = index === 0;
                   const isWorst = index === results.length - 1;
                   
+                  // Lógica simples para classificar a taxa (apenas visual)
+                  const rateType = result.monthlyInterestRate < 2.5 ? 'baixo' : result.monthlyInterestRate < 5 ? 'medio' : 'alto';
+                  const rateColor = rateType === 'baixo' ? 'bg-green-600' : rateType === 'medio' ? 'bg-orange-600' : 'bg-red-600';
+                  const rateLabel = rateType === 'baixo' ? 'Baixa' : rateType === 'medio' ? 'Média' : 'Alta';
+
                   return (
                     <Card 
-                      key={result.institution.id}
+                      key={result.institutionName}
                       className={`p-6 relative overflow-hidden ${
                         isBest 
                           ? 'bg-gradient-to-br from-green-50 to-emerald-50 border-2 border-green-400' 
@@ -220,27 +204,13 @@ export function SimulationDialog({ isOpen, onClose }: SimulationDialogProps) {
                       )}
 
                       <div className="mb-4">
-                        <h4 className="text-slate-900 mb-1">{result.institution.name}</h4>
+                        <h4 className="text-slate-900 mb-1">{result.institutionName}</h4>
                         <div className="flex items-center gap-2">
-                          <Badge 
-                            className={
-                              result.institution.type === 'baixo' 
-                                ? 'bg-green-600' 
-                                : result.institution.type === 'medio'
-                                ? 'bg-orange-600'
-                                : 'bg-red-600'
-                            }
-                          >
-                            {result.institution.interestRate}% a.m.
+                          <Badge className={rateColor}>
+                            {result.monthlyInterestRate}% a.m.
                           </Badge>
                           <span className="text-slate-600">
-                            Taxa de Juros {
-                              result.institution.type === 'baixo' 
-                                ? 'Baixa' 
-                                : result.institution.type === 'medio'
-                                ? 'Média'
-                                : 'Alta'
-                            }
+                            Taxa de Juros {rateLabel}
                           </span>
                         </div>
                       </div>
@@ -249,7 +219,7 @@ export function SimulationDialog({ isOpen, onClose }: SimulationDialogProps) {
                         <div className="flex items-center justify-between p-3 bg-white rounded-lg">
                           <span className="text-slate-600">Parcela Mensal</span>
                           <span className="text-slate-900">
-                            R$ {result.monthlyPayment.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                            R$ {result.installmentValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                           </span>
                         </div>
 
@@ -257,13 +227,6 @@ export function SimulationDialog({ isOpen, onClose }: SimulationDialogProps) {
                           <span className="text-slate-600">Total a Pagar</span>
                           <span className="text-slate-900">
                             R$ {result.totalAmount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                          </span>
-                        </div>
-
-                        <div className="flex items-center justify-between p-3 bg-white rounded-lg">
-                          <span className="text-slate-600">Total de Juros</span>
-                          <span className={isWorst ? 'text-red-600' : isBest ? 'text-green-600' : 'text-orange-600'}>
-                            R$ {result.totalInterest.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                           </span>
                         </div>
 
@@ -277,7 +240,7 @@ export function SimulationDialog({ isOpen, onClose }: SimulationDialogProps) {
                             <span className="text-slate-900">CET (Custo Efetivo Total)</span>
                           </div>
                           <span className={`${isWorst ? 'text-red-700' : isBest ? 'text-green-700' : 'text-slate-900'}`}>
-                            {result.cet.toFixed(2)}%
+                            {result.cetPercentage.toFixed(2)}%
                           </span>
                         </div>
                       </div>
@@ -290,7 +253,8 @@ export function SimulationDialog({ isOpen, onClose }: SimulationDialogProps) {
 
           {/* Informação Educacional */}
           <Card className="p-6 bg-gradient-to-br from-blue-50 to-indigo-50 border border-blue-200">
-            <div className="flex items-start gap-4">
+            {/* ... (O conteúdo educativo continua igual) ... */}
+             <div className="flex items-start gap-4">
               <div className="w-12 h-12 bg-blue-600 rounded-full flex items-center justify-center shrink-0">
                 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
@@ -303,22 +267,7 @@ export function SimulationDialog({ isOpen, onClose }: SimulationDialogProps) {
                 </p>
                 <div className="space-y-2">
                   <div className="flex items-start gap-2">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-green-600 shrink-0 mt-1">
-                      <polyline points="20 6 9 17 4 12"/>
-                    </svg>
                     <span className="text-slate-700">Compare sempre o CET entre diferentes ofertas</span>
-                  </div>
-                  <div className="flex items-start gap-2">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-green-600 shrink-0 mt-1">
-                      <polyline points="20 6 9 17 4 12"/>
-                    </svg>
-                    <span className="text-slate-700">Parcelas menores podem esconder juros mais altos</span>
-                  </div>
-                  <div className="flex items-start gap-2">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-green-600 shrink-0 mt-1">
-                      <polyline points="20 6 9 17 4 12"/>
-                    </svg>
-                    <span className="text-slate-700">Quanto menor o CET, menos você paga no total</span>
                   </div>
                 </div>
               </div>

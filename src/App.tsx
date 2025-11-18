@@ -1,46 +1,80 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { LandingPage } from "./components/LandingPage";
 import { LoginPage } from "./components/LoginPage";
 import { SignupPage } from "./components/SignupPage";
 import { Dashboard } from "./components/Dashboard";
-import api from "./utils/api";
+import api, { ApiError } from "./utils/api";
 import LoadingProvider from "./components/LoadingProvider";
-import GlobalAlert from "./components/GlobalAlert";
+import { Toaster, toast } from 'sonner';
 
+// Removido "reset-password" do tipo
 type Screen = "landing" | "login" | "signup" | "dashboard";
 
 function App() {
   const [currentScreen, setCurrentScreen] = useState<Screen>("landing");
   const [isAuthenticated, setIsAuthenticated] = useState(false);
 
+  useEffect(() => {
+    const token = sessionStorage.getItem("token");
+    if (token) {
+      setIsAuthenticated(true);
+      setCurrentScreen("dashboard");
+    }
+  }, []);
+
   const handleLogin = async (email: string, password: string) => {
-    const result = await api.post("auth/login", {
-      email,
-      password,
-    });
+    try {
+      const result = await api.post<{ token: string }>("auth/login", {
+        email: email,
+        password: password,
+      });
 
-    sessionStorage.setItem("token", result.data.token);
-    setIsAuthenticated(true);
-    setCurrentScreen("dashboard");
-  };
+      sessionStorage.setItem("token", result.token);
+      setIsAuthenticated(true);
+      setCurrentScreen("dashboard");
 
-  const handleSignup = async (
-    name: string,
-    email: string,
-    password: string
-  ) => {
-    const result = await api.post("users", {
-      name,
-      email,
-      password,
-    });
+    } catch (error: any) {
+      if (error?.status === 401) {
+        toast.error("Falha no Login", {
+          description: "E-mail ou senha incorretos. Verifique seus dados."
+        });
+      } else {
+        toast.error("Erro de Conexão", {
+          description: "Não foi possível conectar ao servidor."
+        });
+      }
+    };
+  }
 
-    sessionStorage.setItem("token", result.data.token);
-    setIsAuthenticated(true);
-    setCurrentScreen("dashboard");
-  };
+  const handleSignup = async (name: string, email: string, password: string) => {
+    try {
+      await api.post("users", {
+        name: name,
+        email: email,
+        password: password,
+      });
+
+      toast.success("Conta criada com sucesso!", {
+        description: "Por favor, faça o login."
+      });
+
+      setCurrentScreen("login");
+
+    } catch (error: any) {
+      if (error?.status === 409) { 
+        toast.error("Erro no Cadastro", {
+          description: "Este e-mail já está cadastrado."
+        });
+      } else {
+        toast.error("Erro de Conexão", {
+          description: "Não foi possível criar a conta."
+        });
+      }
+    };
+  }
 
   const handleLogout = () => {
+    sessionStorage.removeItem("token");
     setIsAuthenticated(false);
     setCurrentScreen("landing");
   };
@@ -73,11 +107,10 @@ function App() {
   } else if (currentScreen === "dashboard" && isAuthenticated) {
     content = <Dashboard onLogout={handleLogout} />;
   }
-
   return (
     <LoadingProvider>
+      <Toaster position="top-right" richColors />
       {content}
-      <GlobalAlert />
     </LoadingProvider>
   );
 }

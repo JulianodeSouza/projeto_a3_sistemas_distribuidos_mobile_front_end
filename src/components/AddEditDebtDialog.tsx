@@ -3,13 +3,32 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Label } from './ui/label';
 import { Input } from './ui/input';
 import { Button } from './ui/button';
-import type { Debt } from '../App';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
+import api from '../utils/api';
+import { toast } from 'sonner';
+import type { Debt } from './Dashboard';
+
+export interface DebtFormData {
+  id?: string;
+  name: string;
+  amount: number;
+  interestRate: number;
+  installments: number;
+  paidInstallments: number;
+  dueDate: string;
+  financialInstitutionId: number;
+}
 
 interface AddEditDebtDialogProps {
   isOpen: boolean;
   onClose: () => void;
-  onSave: (debt: Debt | Omit<Debt, 'id'>) => void;
+  onSave: (data: DebtFormData) => void;
   debt: Debt | null;
+}
+
+interface InstitutionDTO {
+  id: number;
+  name: string;
 }
 
 export function AddEditDebtDialog({ isOpen, onClose, onSave, debt }: AddEditDebtDialogProps) {
@@ -20,58 +39,92 @@ export function AddEditDebtDialog({ isOpen, onClose, onSave, debt }: AddEditDebt
     installments: '',
     paidInstallments: '',
     dueDate: '',
-    creditor: ''
+    financialInstitutionId: ''
   });
 
+  const [institutions, setInstitutions] = useState<InstitutionDTO[]>([]);
+
+  // 1. EFEITO APENAS PARA BUSCAR OS BANCOS
   useEffect(() => {
-    if (debt) {
-      setFormData({
-        name: debt.name,
-        amount: debt.amount.toString(),
-        interestRate: debt.interestRate.toString(),
-        installments: debt.installments.toString(),
-        paidInstallments: debt.paidInstallments.toString(),
-        dueDate: debt.dueDate,
-        creditor: debt.creditor
-      });
-    } else {
-      setFormData({
-        name: '',
-        amount: '',
-        interestRate: '',
-        installments: '',
-        paidInstallments: '0',
-        dueDate: '',
-        creditor: ''
-      });
+    if (isOpen) {
+      const fetchInstitutions = async () => {
+        try {
+          const data = await api.get<InstitutionDTO[]>('financial-institutions');
+          setInstitutions(data);
+        } catch (error) {
+          console.error(error);
+          toast.error("Erro ao carregar bancos.");
+        }
+      };
+      fetchInstitutions();
     }
-  }, [debt, isOpen]);
+  }, [isOpen]);
+
+  // 2. EFEITO SEPARADO PARA PREENCHER O FORMULÁRIO
+  // Ele roda toda vez que 'debt' muda OU quando a lista de 'institutions' termina de carregar
+  useEffect(() => {
+    if (isOpen) {
+      if (debt) {
+        // Tenta achar o banco na lista carregada
+        const foundInstitution = institutions.find(inst => inst.name === debt.creditor);
+        
+        setFormData({
+          name: debt.name,
+          amount: debt.amount.toString(),
+          interestRate: debt.interestRate.toString(),
+          installments: debt.installments.toString(),
+          paidInstallments: debt.paidInstallments.toString(),
+          dueDate: new Date(debt.dueDate).toISOString().split('T')[0],
+          // Só preenche o ID se realmente achou o banco na lista
+          financialInstitutionId: foundInstitution ? foundInstitution.id.toString() : ''
+        });
+      } else {
+        // Modo Adicionar (Limpar)
+        setFormData({
+          name: '',
+          amount: '',
+          interestRate: '',
+          installments: '',
+          paidInstallments: '0',
+          dueDate: '',
+          financialInstitutionId: ''
+        });
+      }
+    }
+  }, [debt, isOpen, institutions]); // <--- O segredo está aqui: observamos 'institutions'
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     
-    const debtData = {
+    // Validação extra antes de enviar
+    if (!formData.financialInstitutionId) {
+      toast.error("Selecione uma instituição financeira.");
+      return;
+    }
+
+    const data: DebtFormData = {
       name: formData.name,
       amount: parseFloat(formData.amount),
       interestRate: parseFloat(formData.interestRate),
       installments: parseInt(formData.installments),
       paidInstallments: parseInt(formData.paidInstallments),
       dueDate: formData.dueDate,
-      creditor: formData.creditor
+      financialInstitutionId: parseInt(formData.financialInstitutionId)
     };
 
     if (debt) {
-      onSave({ ...debtData, id: debt.id });
+      onSave({ ...data, id: debt.id });
     } else {
-      onSave(debtData);
+      onSave(data);
     }
   };
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setFormData({
-      ...formData,
-      [e.target.name]: e.target.value
-    });
+    setFormData({ ...formData, [e.target.name]: e.target.value });
+  };
+
+  const handleSelectChange = (value: string) => {
+    setFormData(prev => ({ ...prev, financialInstitutionId: value }));
   };
 
   return (
@@ -79,115 +132,56 @@ export function AddEditDebtDialog({ isOpen, onClose, onSave, debt }: AddEditDebt
       <DialogContent className="sm:max-w-[500px]">
         <DialogHeader>
           <DialogTitle>{debt ? 'Editar Dívida' : 'Adicionar Nova Dívida'}</DialogTitle>
-          <DialogDescription>
-            {debt 
-              ? 'Atualize as informações da sua dívida abaixo.' 
-              : 'Preencha as informações do empréstimo que deseja cadastrar.'}
-          </DialogDescription>
+          <DialogDescription>Preencha as informações abaixo.</DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit}>
           <div className="grid gap-4 py-4">
             <div className="grid gap-2">
-              <Label htmlFor="name">Nome do Empréstimo</Label>
-              <Input
-                id="name"
-                name="name"
-                value={formData.name}
-                onChange={handleChange}
-                placeholder="Ex: Empréstimo Pessoal"
-                required
-              />
+              <Label htmlFor="name">Nome</Label>
+              <Input id="name" name="name" value={formData.name} onChange={handleChange} required />
             </div>
-
+            
+            {/* SELECT DE BANCOS */}
             <div className="grid gap-2">
-              <Label htmlFor="creditor">Credor</Label>
-              <Input
-                id="creditor"
-                name="creditor"
-                value={formData.creditor}
-                onChange={handleChange}
-                placeholder="Ex: Banco XYZ"
-                required
-              />
+              <Label>Credor (Banco)</Label>
+              <Select value={formData.financialInstitutionId} onValueChange={handleSelectChange} required>
+                <SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger>
+                <SelectContent>
+                  {institutions.map((inst) => (
+                    <SelectItem key={inst.id} value={inst.id.toString()}>{inst.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
 
             <div className="grid grid-cols-2 gap-4">
-              <div className="grid gap-2">
-                <Label htmlFor="amount">Valor Total (R$)</Label>
-                <Input
-                  id="amount"
-                  name="amount"
-                  type="number"
-                  step="0.01"
-                  value={formData.amount}
-                  onChange={handleChange}
-                  placeholder="10000.00"
-                  required
-                />
-              </div>
-
-              <div className="grid gap-2">
-                <Label htmlFor="interestRate">Taxa de Juros (% a.m.)</Label>
-                <Input
-                  id="interestRate"
-                  name="interestRate"
-                  type="number"
-                  step="0.01"
-                  value={formData.interestRate}
-                  onChange={handleChange}
-                  placeholder="2.5"
-                  required
-                />
-              </div>
+                <div className="grid gap-2">
+                    <Label htmlFor="amount">Valor Total</Label>
+                    <Input id="amount" name="amount" type="number" step="0.01" value={formData.amount} onChange={handleChange} required />
+                </div>
+                <div className="grid gap-2">
+                    <Label htmlFor="interestRate">Juros (%)</Label>
+                    <Input id="interestRate" name="interestRate" type="number" step="0.01" value={formData.interestRate} onChange={handleChange} required />
+                </div>
             </div>
-
             <div className="grid grid-cols-2 gap-4">
-              <div className="grid gap-2">
-                <Label htmlFor="installments">Total de Parcelas</Label>
-                <Input
-                  id="installments"
-                  name="installments"
-                  type="number"
-                  value={formData.installments}
-                  onChange={handleChange}
-                  placeholder="24"
-                  required
-                />
-              </div>
-
-              <div className="grid gap-2">
-                <Label htmlFor="paidInstallments">Parcelas Pagas</Label>
-                <Input
-                  id="paidInstallments"
-                  name="paidInstallments"
-                  type="number"
-                  value={formData.paidInstallments}
-                  onChange={handleChange}
-                  placeholder="5"
-                  required
-                />
-              </div>
+                <div className="grid gap-2">
+                    <Label htmlFor="installments">Parcelas</Label>
+                    <Input id="installments" name="installments" type="number" value={formData.installments} onChange={handleChange} required />
+                </div>
+                <div className="grid gap-2">
+                    <Label htmlFor="paidInstallments">Pagas</Label>
+                    <Input id="paidInstallments" name="paidInstallments" type="number" value={formData.paidInstallments} onChange={handleChange} required />
+                </div>
             </div>
-
             <div className="grid gap-2">
-              <Label htmlFor="dueDate">Data de Vencimento Final</Label>
-              <Input
-                id="dueDate"
-                name="dueDate"
-                type="date"
-                value={formData.dueDate}
-                onChange={handleChange}
-                required
-              />
+                <Label htmlFor="dueDate">Vencimento</Label>
+                <Input id="dueDate" name="dueDate" type="date" value={formData.dueDate} onChange={handleChange} required />
             </div>
           </div>
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={onClose}>
-              Cancelar
-            </Button>
-            <Button type="submit">
-              {debt ? 'Salvar Alterações' : 'Adicionar Dívida'}
-            </Button>
+            <Button type="button" variant="outline" onClick={onClose}>Cancelar</Button>
+            <Button type="submit">Salvar</Button>
           </DialogFooter>
         </form>
       </DialogContent>

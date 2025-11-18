@@ -19,7 +19,7 @@ export function LandingPage({ onLogin, onSignup }: LandingPageProps) {
                   <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
                 </svg>
               </div>
-              <span className="text-slate-900">Pró-Quitação</span>
+              <span className="text-slate-900">Quitajá</span>
             </div>
             <div className="flex items-center gap-3">
               <button
@@ -32,7 +32,7 @@ export function LandingPage({ onLogin, onSignup }: LandingPageProps) {
                 onClick={onSignup}
                 className="px-6 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors shadow-sm"
               >
-                Começar Agora
+                Crie sua conta
               </button>
             </div>
           </div>
@@ -188,7 +188,7 @@ export function LandingPage({ onLogin, onSignup }: LandingPageProps) {
       {/* Footer */}
       <footer className="py-8 px-4 sm:px-6 lg:px-8 bg-slate-900 text-slate-400">
         <div className="max-w-7xl mx-auto text-center">
-          <p>© 2025 Pró-Quitação. Sua jornada para a independência financeira.</p>
+          <p>© 2025 Quitajá. Sua jornada para a independência financeira.</p>
         </div>
       </footer>
     </div>

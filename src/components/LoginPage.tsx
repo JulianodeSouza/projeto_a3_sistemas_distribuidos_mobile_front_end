@@ -34,7 +34,7 @@ export function LoginPage({ onLogin, onBackToLanding, onGoToSignup }: LoginPageP
               </svg>
             </div>
             <span className="text-slate-900 group-hover:text-purple-600 transition-colors">
-              Pró-Quitação
+              QuitaJá
             </span>
           </button>
           <h1 className="text-slate-900 mb-2">Bem-vindo de volta</h1>
